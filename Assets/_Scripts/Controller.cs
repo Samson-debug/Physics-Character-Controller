@@ -1,5 +1,7 @@
 using System;
+using Unity.Mathematics;
 using UnityEditor;
+using UnityEditor.Search;
 using UnityEngine;
 using UnityEngine.Rendering.VirtualTexturing;
 using UnityEngine.Serialization;
@@ -9,6 +11,11 @@ public class Controller : MonoBehaviour
 {
     [Header("Common References")]
     public Renderer renderer;
+
+    [Header("Rotation")]
+    public float uprightSpringStiffness;
+    public float upRightDampingForce;
+    private Quaternion idleRot;
 
     [Header("External Forces")]
     public float gravity = -10f;
@@ -27,6 +34,8 @@ public class Controller : MonoBehaviour
     
     [Header("Debug")]
     public bool drawDebug = true;
+    private Vector3 rotationAxis;
+    private float rotationAngle;
     
     Rigidbody rb;
 
@@ -41,6 +50,8 @@ public class Controller : MonoBehaviour
         if(renderer != null) bodyHeight = renderer.bounds.size.y;
         rideLength = restLength + bodyHeight * 0.5f;
         rayLength = rideLength + maxTravelLength + extraBufferLength;
+        
+        idleRot = transform.rotation;
     }
 
     private void Update()
@@ -51,8 +62,29 @@ public class Controller : MonoBehaviour
     private void FixedUpdate()
     {
         Float();
+        UpRightForce();
     }
+    
+    private void UpRightForce()
+    {
+        Quaternion currentRot = transform.rotation;
+        Quaternion targetRot = UtilsMath.ShortestRotation(idleRot, currentRot);
 
+        Vector3 rotAxis;
+        float rotDegrees;
+        targetRot.ToAngleAxis(out rotDegrees, out rotAxis);
+        rotAxis.Normalize();
+        
+        float rotRadians = rotDegrees * Mathf.Deg2Rad;
+        
+        //torque = force * r
+        rb.AddTorque(rotAxis * (rotRadians * uprightSpringStiffness) - (rb.angularVelocity * upRightDampingForce));
+        
+        // for debug
+        rotationAngle = rotDegrees;
+        rotationAxis = rotAxis;
+    }
+    
     private void Float()
     {
         bool rayDidHit = Physics.Raycast(Center, rayDir, out RaycastHit hit, rayLength);
@@ -110,7 +142,7 @@ public class Controller : MonoBehaviour
     {
         if(!drawDebug) return;
         
-        Gizmos.color = Color.magenta;
+        /*Gizmos.color = Color.magenta;
         
         if(!Application.isPlaying){
             //Scene View debug
@@ -119,8 +151,15 @@ public class Controller : MonoBehaviour
         }
 
         Gizmos.color = Color.blue;
-        Gizmos.DrawSphere(Center, 0.1f);
+        Gizmos.DrawSphere(Center, 0.1f);*/
         
-        //spring debug
+        //rotation
+        Vector3 center = transform.TransformDirection(rb.centerOfMass);
+        Gizmos.color = Color.blue;
+        Gizmos.DrawRay(center,rotationAxis);
+
+        Gizmos.color = Color.red;
+        Gizmos.DrawLine(center, center + transform.forward * 5f);
+        Gizmos.DrawLine(center, center + (Quaternion.AngleAxis(rotationAngle, rotationAxis) * transform.forward) * 5f);
     }
 }
